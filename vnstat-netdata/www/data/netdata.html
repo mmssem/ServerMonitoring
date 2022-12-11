@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <link href="https://unpkg.com/tailwindcss@^1.0/dist/tailwind.min.css" rel="stylesheet">    
+    
+    <script>var netdataNoBootstrap = true;</script>
+    <script src="http://146.56.102.36:19999/dashboard.js"></script>
+
+</head>
+
+<body>
+    <div class="grid grid-cols-4 gap-4">    
+        <div>
+            <embed src="http://146.56.102.36:19999/api/v1/badge.svg?chart=system.cpu&refresh=auto&scale=150" />
+        </div>
+        <div>
+            <embed
+                src="http://146.56.102.36:19999/api/v1/badge.svg?chart=system.cpu&alarm=10min_cpu_usage&refresh=auto&scale=150" />
+        </div>
+        <div>
+            <embed
+                src="http://146.56.102.36:19999/api/v1/badge.svg?chart=system.ram&alarm=ram_in_use&refresh=auto&scale=150" />
+        </div>
+        <div>
+            <embed
+                src="http://146.56.102.36:19999/api/v1/badge.svg?chart=disk_space._&alarm=disk_space_usage&refresh=auto"
+                type="image/svg+xml" height="20" />
+        </div>
+    </div>
+    <br/>
+    <div class="grid grid-cols-5 gap-4">
+        <div data-netdata="system.cpu" data-host="http://146.56.102.36:19999/" data-gauge-max-value="100"
+            data-chart-library="gauge" data-width="80%" data-after="-540" data-points="540" data-title="CPU"
+            data-units="%" data-colors="#2c9588" data-gauge-generate-gradient="[0, 80, 100]"
+            data-gauge-gradient-percent-color-0="#2c9588" data-gauge-gradient-percent-color-80="#c96667"
+            data-gauge-gradient-percent-color-100="#ff3300" class="netdata-container">
+        </div>
+        <div data-netdata="disk_space._" data-host="http://146.56.102.36:19999/" data-title="disk space"
+            data-append-options="percentage" data-decimal-digits="0" data-dimensions="used" data-chart-library="gauge"
+            data-width="100%" data-height="80%" data-after="-300" data-points="300" data-gauge-max-value="100"
+            data-colors="#ffffff" data-gauge-generate-gradient="[0, 70, 100]"
+            data-gauge-gradient-percent-color-0="#ffffff" data-gauge-gradient-percent-color-70="d88b2f"
+            data-gauge-gradient-percent-color-100="#ff3300" data-units="%">
+        </div>
+    </div>
+    <br/>
+    <div class="grid grid-cols-5 gap-4">
+        <div class="netdata-container-easypiechart" data-netdata="system.ram" data-host="http://146.56.102.36:19999/"
+            data-dimensions="used|buffers|active|wired" data-append-options="percentage"
+            data-chart-library="easypiechart" data-title="Used RAM" data-units="%" data-easypiechart-max-value="100"
+            data-width="50%" data-after="-540" data-points="540" data-colors="#EE9911" role="application">
+        </div>
+        <div data-netdata="system.io" data-host="http://146.56.102.36:19999/" data-dimensions="in"
+            data-chart-library="easypiechart" data-title="Disk Read" data-width="50%" data-points="540"
+            data-common-units="system.io.mainhead" role="application">
+        </div>
+        <div data-netdata="system.io" data-host="http://146.56.102.36:19999/" data-dimensions="out"
+            data-chart-library="easypiechart" data-title="Disk Write" data-width="50%" data-points="540"
+            data-common-units="system.io.mainhead" role="application">
+        </div>
+        <div data-netdata="system.net" data-width="50%" data-host="http://146.56.102.36:19999/"
+            data-dimensions="received" data-chart-library="easypiechart" data-title="Net Inbound" data-width="11%"
+            data-points="540" data-common-units="system.net.mainhead" role="application">
+        </div>
+        <div data-netdata="system.net" data-host="http://146.56.102.36:19999/" data-width="50%" data-dimensions="sent"
+            data-chart-library="easypiechart" data-title="Net Outbound" data-width="11%" data-points="540"
+            data-common-units="system.net.mainhead" role="application">
+        </div>        
+    </div>
+    <br/>    
+    <div class="grid grid-cols-2 gap-4">
+        <div data-netdata="system.cpu" data-host="http://146.56.102.36:19999/" data-width="100%" data-height="260px"
+            data-legend="no" role="application">
+        </div>        
+        <div data-netdata="cgroup_front_nginx_cname.cpu_limit" data-width="100%"
+            data-dygraph-valuerange="[0, null]" data-decimal-digits="-1" data-legend-position="bottom">
+        </div>        
+    </div>            
+    <br/>
+    <br/>
+</body>
+
+</html>

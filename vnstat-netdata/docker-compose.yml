@@ -1,0 +1,184 @@
+version: '3.9'
+
+networks: 
+  mung_net:
+    driver: bridge
+
+services:
+  front_nginx:
+    container_name: front_nginx_cname
+    image: mungkhs/nginxwaf:1.2 #DockerHub에 올려진 우리의 이미지를 이용함.
+    restart: always
+    privileged: true
+    ports:
+      - "80:80"
+      - "81:81"
+      - "82:82"
+      - "8685:8685"   #vnstat
+      - "19999:19999" #netdata
+    volumes:
+      - ./docker/front/default.conf:/usr/local/nginx/conf.d/default.conf
+      - ./docker/front/nginx.conf:/usr/local/nginx/conf/nginx.conf      
+      - ./docker/front/modsecurity.conf:/usr/local/nginx/conf/modsecurity.conf        
+      - ./docker/front/modsec_includes.conf:/usr/local/nginx/conf/modsec_includes.conf
+      - ./docker/front/crs-setup.conf:/usr/local/nginx/conf/rules/crs-setup.conf      
+      - ./docker/fail2ban/jail.conf:/etc/fail2ban/jail.conf                           
+      - ./docker/fail2ban/jail.conf:/etc/fail2ban/jail.local                          
+      - ./docker/fail2ban/filter.d/:/etc/fail2ban/filter.d/                           
+    depends_on:
+      - web
+      - web2
+    networks:
+      - mung_net
+  web:
+    image: nginx:1.23.2
+    container_name: nginx_cname
+    restart: unless-stopped
+    volumes:
+      - ./www/data:/var/www
+      - ./docker/conf/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php_serv
+    expose:
+      - "80"
+    networks:
+      - mung_net
+  web2:
+    image: nginx:1.23.2
+    container_name: nginx_cname2
+    restart: unless-stopped
+    volumes:
+      - ./www/data2:/var/www
+      - ./docker/conf/default2.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php2_serv
+    expose:
+      - "80"
+    networks:
+      - mung_net
+  php_serv:
+    container_name: php_cname
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./www/data:/var/www
+    expose:
+      - "9000"
+    networks:
+      - mung_net
+  php2_serv:
+    container_name: php2_cname
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./www/data2:/var/www
+    expose:
+      - "9000"
+    networks:
+      - mung_net
+  mysql_serv:
+    image: mysql:latest
+    container_name: mysql_cname
+    restart: unless-stopped
+    expose:
+      - "3306"
+    volumes:
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d         
+      - ./docker/mysql:/docker-entrypoint-initdb.d        
+      - ./../mysql_data/mysql:/var/lib/mysql
+    environment: 
+      MYSQL_DATABASE: testdb
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_PASSWORD: password
+      MYSQL_USER: admin
+      SERVICE_TAGS: mysqlservicetags
+      SERVICE_NAME: mysqlservicename
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    networks:
+      - mung_net
+  phpmyadmin_serv:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin_cname
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    expose:
+      - "80"
+    depends_on: 
+      - mysql_serv
+    networks:
+      - mung_net
+  vnstat:
+    image: vergoh/vnstat:latest
+    container_name: vnstat
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - vnstatdb:/var/lib/vnstat
+    environment:
+      - HTTP_PORT=0
+  vnstati:
+    image: vergoh/vnstat:latest
+    container_name: vnstati
+    restart: unless-stopped
+    #ports:
+    #  - "8685:8685"
+    expose:
+      - 8685
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - vnstatdb:/var/lib/vnstat:ro
+    environment:
+      - HTTP_PORT=8685
+      - HTTP_LOG=/dev/stdout
+      - LARGE_FONTS=0
+      - CACHE_TIME=1
+      - RATE_UNIT=1
+      - PAGE_REFRESH=0
+      - RUN_VNSTATD=0
+    networks:
+      - mung_net
+  netdata:
+    image: netdata/netdata
+    container_name: netdata
+    hostname: mmssem.kr
+    expose:
+      - 19999
+    #ports:
+    #    - 19999:19999
+    restart: unless-stopped
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - mung_net              
+volumes:
+  vnstatdb:
+  netdataconfig:
+  netdatalib:
+  netdatacache:

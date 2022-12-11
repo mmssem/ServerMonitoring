@@ -1,0 +1,313 @@
+version: '3.9'
+
+networks: 
+  mung_net:
+    driver: bridge
+
+services:
+  front_nginx:
+    container_name: front_nginx_cname
+    image: mungkhs/nginxwaf:1.2 #DockerHub에 올려진 우리의 이미지를 이용함.
+    #build: ./docker/front/
+    restart: always
+    privileged: true
+    ports:
+      - "80:80"
+      - "81:81"
+      - "82:82"
+      - "8685:8685"   #vnstat
+      #- "19999:19999" #netdata
+      - "3000:3000"       #grafana
+      - "9090:9090"       #prometheus
+      - "9100:9100"       #nodeexpoter      
+    volumes:
+      - ./docker/front/default.conf:/usr/local/nginx/conf.d/default.conf
+      - ./docker/front/nginx.conf:/usr/local/nginx/conf/nginx.conf      
+      - ./docker/front/modsecurity.conf:/usr/local/nginx/conf/modsecurity.conf        
+      - ./docker/front/modsec_includes.conf:/usr/local/nginx/conf/modsec_includes.conf
+      - ./docker/front/crs-setup.conf:/usr/local/nginx/conf/rules/crs-setup.conf      
+      - ./docker/fail2ban/jail.conf:/etc/fail2ban/jail.conf                           
+      - ./docker/fail2ban/jail.conf:/etc/fail2ban/jail.local                          
+      - ./docker/fail2ban/filter.d/:/etc/fail2ban/filter.d/                           
+    depends_on:
+      - web
+      - web2
+    networks:
+      - mung_net
+  web:
+    image: nginx:1.23.2
+    container_name: nginx_cname
+    restart: unless-stopped
+    volumes:
+      - ./www/data:/var/www
+      - ./docker/conf/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php_serv
+    expose:
+      - "80"
+    networks:
+      - mung_net
+  web2:
+    image: nginx:1.23.2
+    container_name: nginx_cname2
+    restart: unless-stopped
+    volumes:
+      - ./www/data2:/var/www
+      - ./docker/conf/default2.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php2_serv
+    expose:
+      - "80"
+    networks:
+      - mung_net
+  php_serv:
+    container_name: php_cname
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./www/data:/var/www
+    expose:
+      - "9000"
+    networks:
+      - mung_net
+  php2_serv:
+    container_name: php2_cname
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./www/data2:/var/www
+    expose:
+      - "9000"
+    networks:
+      - mung_net
+  mysql_serv:
+    image: mysql:latest
+    container_name: mysql_cname
+    restart: unless-stopped
+    expose:
+      - "3306"
+    volumes:
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d         
+      - ./docker/mysql:/docker-entrypoint-initdb.d        
+      - ./../mysql_data/mysql:/var/lib/mysql
+    environment: 
+      MYSQL_DATABASE: testdb
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_PASSWORD: password
+      MYSQL_USER: admin
+      SERVICE_TAGS: mysqlservicetags
+      SERVICE_NAME: mysqlservicename
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    networks:
+      - mung_net
+  phpmyadmin_serv:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin_cname
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    expose:
+      - "80"
+    depends_on: 
+      - mysql_serv
+    networks:
+      - mung_net
+  vnstat:
+    image: vergoh/vnstat:latest
+    container_name: vnstat
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - vnstatdb:/var/lib/vnstat
+    environment:
+      - HTTP_PORT=0
+  vnstati:
+    image: vergoh/vnstat:latest
+    container_name: vnstati
+    restart: unless-stopped
+    #ports:
+    #  - "8685:8685"
+    expose:
+      - 8685
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - vnstatdb:/var/lib/vnstat:ro
+    environment:
+      - HTTP_PORT=8685
+      - HTTP_LOG=/dev/stdout
+      - LARGE_FONTS=0
+      - CACHE_TIME=1
+      - RATE_UNIT=1
+      - PAGE_REFRESH=0
+      - RUN_VNSTATD=0
+    networks:
+      - mung_net
+  # netdata:
+  #   image: netdata/netdata
+  #   container_name: netdata
+  #   hostname: mmssem.kr
+  #   expose:
+  #     - 19999
+  #   #ports:
+  #   #    - 19999:19999
+  #   restart: unless-stopped
+  #   cap_add:
+  #     - SYS_PTRACE
+  #   security_opt:
+  #     - apparmor:unconfined
+  #   volumes:
+  #     - netdataconfig:/etc/netdata
+  #     - netdatalib:/var/lib/netdata
+  #     - netdatacache:/var/cache/netdata
+  #     - /etc/passwd:/host/etc/passwd:ro
+  #     - /etc/group:/host/etc/group:ro
+  #     - /proc:/host/proc:ro
+  #     - /sys:/host/sys:ro
+  #     - /etc/os-release:/host/etc/os-release:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   networks:
+  #     - mung_net              
+  prometheus:
+    image: prom/prometheus:v2.40.2
+    container_name: prometheus
+    privileged: true
+    volumes:
+      - ./prom/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    depends_on:
+        - cadvisor
+    expose:
+        - 9090
+    #ports:
+    #    - 9090:9090
+    networks:
+        - mung_net
+  alertmanager:
+    image: prom/alertmanager:v0.24.0
+    container_name: alertmanager
+    volumes:
+      - ./prom/alertmanager:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+    restart: unless-stopped
+    expose:
+      - 9093
+    networks:
+      - mung_net           
+  nodeexporter:
+    image: prom/node-exporter:v1.4.0
+    container_name: nodeexporter
+    privileged: true
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    expose:
+      - 9100
+    networks:
+      - mung_net
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.46.0
+    container_name: cadvisor
+    privileged: true
+    command:
+      - '-housekeeping_interval=10s'
+      - '-docker_only=true'
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    security_opt:
+      - no-new-privileges:true      
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/cgroup:ro
+      - /dev/disk/:/dev/disk:ro      
+    restart: unless-stopped
+    expose:
+      - 8080
+    networks:
+      - mung_net      
+  grafana:
+    image: grafana/grafana:9.2.5
+    container_name: grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./prom/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=password
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    depends_on:
+      - cadvisor
+      - prometheus
+    expose:
+      - 3000
+    #ports:
+    #    - 3000:3000
+    networks:
+      - mung_net
+  nginx-prometheus-exporter:
+    image: nginx/nginx-prometheus-exporter:0.11.0
+    container_name: nginx-prometheus-exporter
+    restart: unless-stopped
+    expose:
+      - 9113
+    command:
+      - -nginx.scrape-uri=http://front_nginx/metrics
+      - -nginx.retries=10
+    depends_on:
+      - prometheus
+    networks:
+      - mung_net                         
+  mysqld-exporter:
+    image: quay.io/prometheus/mysqld-exporter
+    container_name: mysqld-exporter
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=root:password@(mysql_serv:3306)/testdb
+    expose:
+      - "9104"      
+    depends_on:
+      - mysql_serv
+    networks:
+      - mung_net        
+volumes:
+  vnstatdb:
+  netdataconfig:
+  netdatalib:
+  netdatacache:
+  prometheus_data:
+  grafana_data:    			  
